@@ -1,0 +1,74 @@
+version: ""
+security:
+  os:
+    ca:
+      crt: ${os_ca_crt}
+      key: ${os_ca_key}
+    identity:
+      crt: ${os_identity_crt}
+      key: ${os_identity_key}
+  kubernetes:
+    ca:
+      crt: ${kubernetes_ca_crt}
+      key: ${kubernetes_ca_key}
+networking:
+  os: {}
+  kubernetes: {}
+services:
+  init:
+    containerRuntime: docker
+    cni: ${container_network_interface}
+  kubeadm:
+    configuration: |
+      apiVersion: kubeadm.k8s.io/v1alpha3
+      kind: InitConfiguration
+      apiEndpoint:
+        advertiseAddress: ${control_plane_endpoint}
+        bindPort: 6443
+      bootstrapTokens:
+      - token: '${token}'
+        ttl: 0s
+      nodeRegistration:
+        taints: ${taints}
+        kubeletExtraArgs:
+          node-labels: ${labels}
+          feature-gates: ExperimentalCriticalPodAnnotation=true
+      ---
+      apiVersion: kubeadm.k8s.io/v1alpha3
+      kind: ClusterConfiguration
+      clusterName: ${cluster_name}
+      controlPlaneEndpoint: ${control_plane_endpoint}:443
+      apiServerCertSANs: [ ${api_server_cert_sans} ]
+      apiServerExtraArgs:
+        runtime-config: settings.k8s.io/v1alpha1=true
+        oidc-issuer-url: https://dex.dev.autonomy.io
+        oidc-username-claim: email
+        oidc-groups-claim: groups
+        oidc-client-id: kubernetes
+        feature-gates: ExperimentalCriticalPodAnnotation=true
+      controllerManagerExtraArgs:
+        terminated-pod-gc-threshold: '100'
+        feature-gates: ExperimentalCriticalPodAnnotation=true
+      schedulerExtraArgs:
+        feature-gates: ExperimentalCriticalPodAnnotation=true
+      networking:
+        dnsDomain: ${dns_domain}
+        podSubnet: ${pod_subnet}
+        serviceSubnet: ${service_subnet}
+      ---
+      apiVersion: kubeproxy.config.k8s.io/v1alpha1
+      kind: KubeProxyConfiguration
+      mode: ipvs
+      ipvs:
+        scheduler: lc
+  trustd:
+    image: docker.io/autonomy/trustd:latest 
+    username: '${trustd_username}'
+    password: '${trustd_password}'
+    endpoints: ${trustd_endpoints}
+  proxyd:
+    image: docker.io/autonomy/proxyd:latest 
+  blockd:
+    image: docker.io/autonomy/blockd:latest 
+  osd:
+    image: docker.io/autonomy/osd:latest 

@@ -1,0 +1,41 @@
+version: ""
+security:
+  os:
+    ca:
+      crt: ${os_ca_crt}
+networking:
+  os: {}
+  kubernetes: {}
+services:
+  init:
+    containerRuntime: docker
+    cni: ${container_network_interface}
+  kubeadm:
+    configuration: |
+      apiVersion: kubeadm.k8s.io/v1alpha3
+      kind: JoinConfiguration
+      controlPlane: false
+      discoveryTokenAPIServers:
+      - ${master_ip}:443
+      # TODO(andrewrynhard): How can we get the certificate's hash using only
+      # TF?
+      # discoveryTokenCACertHashes:
+      # - cert_hash
+      discoveryTokenUnsafeSkipCAVerification: true
+      nodeRegistration:
+        taints: ${taints}
+        kubeletExtraArgs:
+          node-labels: ${labels}
+          feature-gates: ExperimentalCriticalPodAnnotation=true
+      token: '${token}'
+  trustd:
+    image: docker.io/autonomy/trustd:latest 
+    username: '${trustd_username}'
+    password: '${trustd_password}'
+    endpoints: ${trustd_endpoints}
+  proxyd:
+    image: docker.io/autonomy/proxyd:latest 
+  blockd:
+    image: docker.io/autonomy/blockd:latest 
+  osd:
+    image: docker.io/autonomy/osd:latest 
