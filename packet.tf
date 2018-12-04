@@ -35,20 +35,21 @@ data "template_file" "matchbox_worker_group" {
 
 data "template_file" "matchbox_init_group" {
   template = "${file("${path.module}/templates/matchbox_host_group.tmpl")}"
-  count    = "${var.talos_master_count}"
 
   vars {
-    hostname = "${format("talosm-%02d.example.com", count.index + 1)}"
+    hostname = "${format("talosm-%02d.example.com", 1)}"
     profile  = "talos-init"
   }
 }
 
 data "template_file" "matchbox_master_group" {
   template = "${file("${path.module}/templates/matchbox_host_group.tmpl")}"
-  count    = "${var.talos_master_count}"
+
+  // Skip first master since it is init node
+  count = "${var.talos_master_count - 1}"
 
   vars {
-    hostname = "${format("talosm-%02d.example.com", count.index + 1)}"
+    hostname = "${format("talosm-%02d.example.com", count.index + 2)}"
     profile  = "talos-master"
   }
 }
@@ -60,58 +61,6 @@ resource "packet_device" "talos_bootstrap" {
   facility         = "${var.packet_facility}"
   project_id       = "${packet_project.talos.id}"
   billing_cycle    = "hourly"
-
-  // Install Matchbox
-  provisioner "remote-exec" {
-    inline = [
-      "wget https://github.com/coreos/matchbox/releases/download/v0.7.1/matchbox-v0.7.1-linux-amd64.tar.gz",
-      "tar xzvf matchbox-v0.7.1-linux-amd64.tar.gz",
-      "mv matchbox-v0.7.1-linux-amd64/matchbox /usr/local/bin",
-      "useradd -U matchbox",
-      "mkdir -p /var/lib/matchbox/assets/talos/${var.talos_version}",
-      "mkdir -p /var/lib/matchbox/groups",
-      "mkdir -p /var/lib/matchbox/profiles",
-      "chown -R matchbox:matchbox /var/lib/matchbox",
-      "cp matchbox-v0.7.1-linux-amd64/contrib/systemd/matchbox-local.service /etc/systemd/system/matchbox.service",
-      "systemctl daemon-reload",
-      "systemctl enable matchbox",
-      "systemctl start matchbox",
-    ]
-  }
-
-  provisioner "file" {
-    content     = "${data.template_file.matchbox_worker_group.rendered}"
-    destination = "/var/lib/matchbox/groups/talos-worker.json"
-  }
-
-  provisioner "file" {
-    content     = "${data.template_file.matchbox_init_group.rendered}"
-    destination = "/var/lib/matchbox/groups/talos-init.json"
-  }
-
-  provisioner "file" {
-    content     = "${data.template_file.matchbox_master_group.rendered}"
-    destination = "/var/lib/matchbox/groups/talos-master.json"
-  }
-
-  // Download talos assets
-  provisioner "remote-exec" {
-    inline = [
-      "cd /var/lib/matchbox/assets/talos/${var.talos_version}",
-      "wget https://github.com/autonomy/talos/releases/download/${var.talos_version}/vmlinuz",
-      "wget https://github.com/autonomy/talos/releases/download/${var.talos_version}/initramfs.xz",
-    ]
-  }
-}
-
-data "template_file" "matchbox_init_profile" {
-  template = "${file("${path.module}/templates/matchbox_profile.tmpl")}"
-
-  vars {
-    id            = "talos-init"
-    talos_version = "${var.talos_version}"
-    talos_args    = "${jsonencode(concat(var.talos_boot_args, list(local.talos_platform, "talos.autonomy.io/userdata=http://${packet_device.talos_bootstrap.network.0.address}:8080/assets/talos/${var.talos_version}/userdata-init.yaml")))}"
-  }
 }
 
 data "template_file" "matchbox_master_profile" {
@@ -134,18 +83,68 @@ data "template_file" "matchbox_worker_profile" {
   }
 }
 
+data "template_file" "matchbox_init_profile" {
+  template = "${file("${path.module}/templates/matchbox_profile.tmpl")}"
+
+  vars {
+    id            = "talos-init"
+    talos_version = "${var.talos_version}"
+    talos_args    = "${jsonencode(concat(var.talos_boot_args, list(local.talos_platform, "talos.autonomy.io/userdata=http://${packet_device.talos_bootstrap.network.0.address}:8080/assets/talos/${var.talos_version}/userdata-init.yaml")))}"
+  }
+}
+
 resource "null_resource" "matchbox_profiles" {
   # Changes to any instance of the cluster requires re-provisioning
   triggers {
     initprofile   = "${data.template_file.matchbox_init_profile.rendered}"
     workerprofile = "${data.template_file.matchbox_worker_profile.rendered}"
     masterprofile = "${data.template_file.matchbox_master_profile.rendered}"
+    bootstrap     = "${packet_device.talos_bootstrap.id}"
+
+    // TODO add additional groups here for matchers
   }
 
   # Bootstrap script can run on any instance of the cluster
   # So we just choose the first in this case
   connection {
     host = "${packet_device.talos_bootstrap.network.0.address}"
+  }
+
+  // Install Matchbox
+  provisioner "remote-exec" {
+    inline = [
+      "wget https://github.com/coreos/matchbox/releases/download/v0.7.1/matchbox-v0.7.1-linux-amd64.tar.gz",
+      "tar xzvf matchbox-v0.7.1-linux-amd64.tar.gz",
+      "mv matchbox-v0.7.1-linux-amd64/matchbox /usr/local/bin",
+      "id matchbox || useradd -U matchbox",
+      "mkdir -p /var/lib/matchbox/assets/talos/${var.talos_version}",
+      "mkdir -p /var/lib/matchbox/groups",
+      "mkdir -p /var/lib/matchbox/profiles",
+      "chown -R matchbox:matchbox /var/lib/matchbox",
+      "cp matchbox-v0.7.1-linux-amd64/contrib/systemd/matchbox-local.service /etc/systemd/system/matchbox.service",
+      "systemctl daemon-reload",
+      "systemctl enable matchbox",
+      "systemctl start matchbox",
+    ]
+  }
+
+  provisioner "file" {
+    content     = "${data.template_file.matchbox_worker_group.rendered}"
+    destination = "/var/lib/matchbox/groups/talos-worker.json"
+  }
+
+  provisioner "file" {
+    content     = "${data.template_file.matchbox_init_group.rendered}"
+    destination = "/var/lib/matchbox/groups/talos-init.json"
+  }
+
+  // Download talos assets
+  provisioner "remote-exec" {
+    inline = [
+      "cd /var/lib/matchbox/assets/talos/${var.talos_version}",
+      "[[ -f /var/lib/matchbox/assets/talos/${var.talos_version}/vmlinuz ]] || wget https://github.com/autonomy/talos/releases/download/${var.talos_version}/vmlinuz",
+      "[[ -f /var/lib/matchbox/assets/talos/${var.talos_version}/initramfs.xz ]] || wget https://github.com/autonomy/talos/releases/download/${var.talos_version}/initramfs.xz",
+    ]
   }
 
   provisioner "file" {
@@ -161,6 +160,26 @@ resource "null_resource" "matchbox_profiles" {
   provisioner "file" {
     content     = "${data.template_file.matchbox_master_profile.rendered}"
     destination = "/var/lib/matchbox/profiles/talos-master.json"
+  }
+}
+
+resource "null_resource" "matchbox_master_groups" {
+  triggers {
+    mastergroups = "${join(",", data.template_file.matchbox_master_group.*.rendered)}"
+    bootstrap    = "${packet_device.talos_bootstrap.id}"
+  }
+
+  // Bootstrap script can run on any instance of the cluster
+  // So we just choose the first in this case
+  connection {
+    host = "${packet_device.talos_bootstrap.network.0.address}"
+  }
+
+  count = "${var.talos_master_count}"
+
+  provisioner "file" {
+    content     = "${element(data.template_file.matchbox_master_group.*.rendered, count.index)}"
+    destination = "${format("%s-%02d%s", "/var/lib/matchbox/groups/talos-master", count.index+1, ".json")}"
   }
 }
 
@@ -202,6 +221,7 @@ resource "packet_ip_attachment" "master" {
   count = "${var.talos_master_count}"
 }
 
+/*
 data "template_file" "init_userdata" {
   template = "${file("${path.module}/templates/userdata-init.yaml.tmpl")}"
 
@@ -314,3 +334,5 @@ resource "packet_device" "talos_worker" {
   project_id    = "${packet_project.talos.id}"
   billing_cycle = "hourly"
 }
+*/
+
