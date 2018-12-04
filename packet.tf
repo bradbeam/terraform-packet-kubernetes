@@ -205,8 +205,8 @@ resource "packet_ip_attachment" "master" {
 data "template_file" "init_userdata" {
   template = "${file("${path.module}/templates/userdata-init.yaml.tmpl")}"
 
-  // TODO
   vars {
+    api_server_cert_sans        = "${var.api_server_cert_sans}"
     cluster_name                = "${var.cluster_name}"
     container_network_interface = "${var.container_network_interface}"
     control_plane_endpoint      = "${var.control_plane_endpoint}"
@@ -231,8 +231,8 @@ data "template_file" "init_userdata" {
 data "template_file" "master_userdata" {
   template = "${file("${path.module}/templates/userdata-master.yaml.tmpl")}"
 
-  // TODO
   vars {
+    api_server_cert_sans        = "${var.api_server_cert_sans}"
     container_network_interface = "${var.container_network_interface}"
     control_plane_endpoint      = "${var.control_plane_endpoint}"
     kubernetes_ca_crt           = "${var.kubernetes_ca_crt}"
@@ -253,7 +253,6 @@ data "template_file" "master_userdata" {
 data "template_file" "worker_userdata" {
   template = "${file("${path.module}/templates/userdata-worker.yaml.tmpl")}"
 
-  // TODO
   vars {
     container_network_interface = "${var.container_network_interface}"
     labels                      = "${var.labels}"

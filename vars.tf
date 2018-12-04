@@ -69,3 +69,83 @@ variable "talos_userdata_path" {
 variable "talos_platform" {
   default = "bare-metal"
 }
+
+variable "cluster_name" {
+  default = ""
+}
+
+variable "container_network_interface" {
+  default = ""
+}
+
+variable "control_plane_endpoint" {
+  default = ""
+}
+
+variable "dns_domain" {
+  default = ""
+}
+
+variable "kubernetes_ca_crt" {
+  default = ""
+}
+
+variable "kubernetes_ca_key" {
+  default = ""
+}
+
+variable "labels" {
+  default = ""
+}
+
+variable "os_ca_crt" {
+  default = ""
+}
+
+variable "os_ca_key" {
+  default = ""
+}
+
+variable "os_identity_crt" {
+  default = ""
+}
+
+variable "os_identity_key" {
+  default = ""
+}
+
+variable "pod_subnet" {
+  default = ""
+}
+
+variable "service_subnet" {
+  default = ""
+}
+
+variable "taints" {
+  default = ""
+}
+
+variable "token" {
+  default = ""
+}
+
+variable "trustd_endpoints" {
+  default = ""
+}
+
+variable "trustd_password" {
+  default = ""
+}
+
+variable "trustd_username" {
+  default = ""
+}
+
+variable "master_ip" {
+  default = ""
+}
+
+variable "api_server_cert_sans" {
+  default = ""
+}
