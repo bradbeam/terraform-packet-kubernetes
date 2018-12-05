@@ -15,7 +15,6 @@ data "http" "githubsshkey" {
 
 locals {
   public_keys    = "${compact(split("\n",join("\n",flatten(data.http.githubsshkey.*.body))))}"
-  talos_userdata = "talos.autonomy.io/userdata=${var.talos_userdata_path}"
   talos_platform = "talos.autonomy.io/platform=${var.talos_platform}"
 }
 
@@ -61,6 +60,24 @@ resource "packet_device" "talos_bootstrap" {
   facility         = "${var.packet_facility}"
   project_id       = "${packet_project.talos.id}"
   billing_cycle    = "hourly"
+
+  // Install Matchbox
+  provisioner "remote-exec" {
+    inline = [
+      "wget https://github.com/coreos/matchbox/releases/download/v0.7.1/matchbox-v0.7.1-linux-amd64.tar.gz",
+      "tar xzvf matchbox-v0.7.1-linux-amd64.tar.gz",
+      "mv matchbox-v0.7.1-linux-amd64/matchbox /usr/local/bin",
+      "id matchbox || useradd -U matchbox",
+      "mkdir -p /var/lib/matchbox/assets/talos/${var.talos_version}",
+      "mkdir -p /var/lib/matchbox/groups",
+      "mkdir -p /var/lib/matchbox/profiles",
+      "chown -R matchbox:matchbox /var/lib/matchbox",
+      "cp matchbox-v0.7.1-linux-amd64/contrib/systemd/matchbox-local.service /etc/systemd/system/matchbox.service",
+      "systemctl daemon-reload",
+      "systemctl enable matchbox",
+      "systemctl start matchbox",
+    ]
+  }
 }
 
 data "template_file" "matchbox_master_profile" {
@@ -108,24 +125,6 @@ resource "null_resource" "matchbox_profiles" {
   # So we just choose the first in this case
   connection {
     host = "${packet_device.talos_bootstrap.network.0.address}"
-  }
-
-  // Install Matchbox
-  provisioner "remote-exec" {
-    inline = [
-      "wget https://github.com/coreos/matchbox/releases/download/v0.7.1/matchbox-v0.7.1-linux-amd64.tar.gz",
-      "tar xzvf matchbox-v0.7.1-linux-amd64.tar.gz",
-      "mv matchbox-v0.7.1-linux-amd64/matchbox /usr/local/bin",
-      "id matchbox || useradd -U matchbox",
-      "mkdir -p /var/lib/matchbox/assets/talos/${var.talos_version}",
-      "mkdir -p /var/lib/matchbox/groups",
-      "mkdir -p /var/lib/matchbox/profiles",
-      "chown -R matchbox:matchbox /var/lib/matchbox",
-      "cp matchbox-v0.7.1-linux-amd64/contrib/systemd/matchbox-local.service /etc/systemd/system/matchbox.service",
-      "systemctl daemon-reload",
-      "systemctl enable matchbox",
-      "systemctl start matchbox",
-    ]
   }
 
   provisioner "file" {
@@ -203,7 +202,7 @@ resource "packet_device" "talos_master" {
 }
 
 data "packet_precreated_ip_block" "talos" {
-  facility       = "${var.packet_facility}"
+  facility       = "${element(packet_device.talos_master.*.facility, 0)}"
   project_id     = "${packet_project.talos.id}"
   address_family = 4
   public         = false

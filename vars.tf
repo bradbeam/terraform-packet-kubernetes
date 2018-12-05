@@ -57,13 +57,6 @@ variable "talos_boot_args" {
     "ip=dhcp",
     "printk.devkmsg=on",
   ]
-
-  // "talos.autonomy.io/userdata=http://192.168.98.255:8080/assets/talos/v0.1.0-alpha.13/userdata.yml",
-  // "talos.autonomy.io/platform=bare-metal"
-}
-
-variable "talos_userdata_path" {
-  default = ""
 }
 
 variable "talos_platform" {
@@ -86,31 +79,7 @@ variable "dns_domain" {
   default = ""
 }
 
-variable "kubernetes_ca_crt" {
-  default = ""
-}
-
-variable "kubernetes_ca_key" {
-  default = ""
-}
-
 variable "labels" {
-  default = ""
-}
-
-variable "os_ca_crt" {
-  default = ""
-}
-
-variable "os_ca_key" {
-  default = ""
-}
-
-variable "os_identity_crt" {
-  default = ""
-}
-
-variable "os_identity_key" {
   default = ""
 }
 
@@ -123,29 +92,5 @@ variable "service_subnet" {
 }
 
 variable "taints" {
-  default = ""
-}
-
-variable "token" {
-  default = ""
-}
-
-variable "trustd_endpoints" {
-  default = ""
-}
-
-variable "trustd_password" {
-  default = ""
-}
-
-variable "trustd_username" {
-  default = ""
-}
-
-variable "master_ip" {
-  default = ""
-}
-
-variable "api_server_cert_sans" {
   default = ""
 }
