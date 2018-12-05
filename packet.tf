@@ -19,11 +19,11 @@ locals {
   talos_platform = "talos.autonomy.io/platform=${var.talos_platform}"
 }
 
-resource "packet_ssh_key" "users" {
-  name       = "${format("user-%02d", count.index + 1)}"
-  count      = "${length(local.public_keys)}"
-  public_key = "${local.public_keys[count.index]}"
-}
+//resource "packet_ssh_key" "users" {
+//  name       = "${format("user-%02d", count.index + 1)}"
+//  count      = "${length(local.public_keys)}"
+//  public_key = "${local.public_keys[count.index]}"
+//}
 
 data "template_file" "matchbox_worker_group" {
   template = "${file("${path.module}/templates/matchbox_default_group.tmpl")}"
@@ -221,30 +221,36 @@ resource "packet_ip_attachment" "master" {
   count = "${var.talos_master_count}"
 }
 
-/*
+module "security" {
+  source = "git::https://github.com/autonomy/terraform-talos-security"
+
+  talos_identity_ip_addresses = "${split(",", replace(join(",", packet_ip_attachment.master.*.cidr_notation), "/32", ""))}"
+  talos_context               = "${var.cluster_name}"
+}
+
 data "template_file" "init_userdata" {
   template = "${file("${path.module}/templates/userdata-init.yaml.tmpl")}"
 
   vars {
-    api_server_cert_sans        = "${var.api_server_cert_sans}"
+    api_server_cert_sans        = "${replace(join(",", packet_ip_attachment.master.*.cidr_notation), "/32", "")}"
     cluster_name                = "${var.cluster_name}"
     container_network_interface = "${var.container_network_interface}"
-    control_plane_endpoint      = "${var.control_plane_endpoint}"
+    control_plane_endpoint      = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}"
     dns_domain                  = "${var.dns_domain}"
-    kubernetes_ca_crt           = "${var.kubernetes_ca_crt}"
-    kubernetes_ca_key           = "${var.kubernetes_ca_key}"
+    kubernetes_ca_crt           = "${base64encode(module.security.kubernetes_ca_crt)}"
+    kubernetes_ca_key           = "${base64encode(module.security.kubernetes_ca_key)}"
     labels                      = "${var.labels}"
-    os_ca_crt                   = "${var.os_ca_crt}"
-    os_ca_key                   = "${var.os_ca_key}"
-    os_identity_crt             = "${var.os_identity_crt}"
-    os_identity_key             = "${var.os_identity_key}"
+    os_ca_crt                   = "${base64encode(module.security.talos_ca_crt)}"
+    os_ca_key                   = "${base64encode(module.security.talos_ca_key)}"
+    os_identity_crt             = "${base64encode(module.security.talos_identity_cert_pem)}"
+    os_identity_key             = "${base64encode(module.security.talos_identity_private_key_pem)}"
     pod_subnet                  = "${var.pod_subnet}"
     service_subnet              = "${var.service_subnet}"
     taints                      = "${var.taints}"
-    token                       = "${var.token}"
-    trustd_endpoints            = "${var.trustd_endpoints}"
-    trustd_password             = "${var.trustd_password}"
-    trustd_username             = "${var.trustd_username}"
+    token                       = "${module.security.kubeadm_token}"
+    trustd_endpoints            = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}:50001"
+    trustd_password             = "${module.security.trustd_password}"
+    trustd_username             = "${module.security.trustd_username}"
   }
 }
 
@@ -252,21 +258,21 @@ data "template_file" "master_userdata" {
   template = "${file("${path.module}/templates/userdata-master.yaml.tmpl")}"
 
   vars {
-    api_server_cert_sans        = "${var.api_server_cert_sans}"
+    api_server_cert_sans        = "${replace(join(",", packet_ip_attachment.master.*.cidr_notation), "/32", "")}"
     container_network_interface = "${var.container_network_interface}"
-    control_plane_endpoint      = "${var.control_plane_endpoint}"
-    kubernetes_ca_crt           = "${var.kubernetes_ca_crt}"
-    kubernetes_ca_key           = "${var.kubernetes_ca_key}"
+    control_plane_endpoint      = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}"
+    kubernetes_ca_crt           = "${base64encode(module.security.kubernetes_ca_crt)}"
+    kubernetes_ca_key           = "${base64encode(module.security.kubernetes_ca_key)}"
     labels                      = "${var.labels}"
-    os_ca_crt                   = "${var.os_ca_crt}"
-    os_ca_key                   = "${var.os_ca_key}"
-    os_identity_crt             = "${var.os_identity_crt}"
-    os_identity_key             = "${var.os_identity_key}"
+    os_ca_crt                   = "${base64encode(module.security.talos_ca_crt)}"
+    os_ca_key                   = "${base64encode(module.security.talos_ca_key)}"
+    os_identity_crt             = "${base64encode(module.security.talos_identity_cert_pem)}"
+    os_identity_key             = "${base64encode(module.security.talos_identity_private_key_pem)}"
     taints                      = "${var.taints}"
-    token                       = "${var.token}"
-    trustd_endpoints            = "${var.trustd_endpoints}"
-    trustd_password             = "${var.trustd_password}"
-    trustd_username             = "${var.trustd_username}"
+    token                       = "${module.security.kubeadm_token}"
+    trustd_endpoints            = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}:50001"
+    trustd_password             = "${module.security.trustd_password}"
+    trustd_username             = "${module.security.trustd_username}"
   }
 }
 
@@ -276,13 +282,14 @@ data "template_file" "worker_userdata" {
   vars {
     container_network_interface = "${var.container_network_interface}"
     labels                      = "${var.labels}"
-    master_ip                   = "${var.master_ip}"
-    os_ca_crt                   = "${var.os_ca_crt}"
+    master_ip                   = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}"
+    control_plane_endpoint      = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}"
+    os_ca_crt                   = "${base64encode(module.security.talos_ca_crt)}"
     taints                      = "${var.taints}"
-    token                       = "${var.token}"
-    trustd_endpoints            = "${var.trustd_endpoints}"
-    trustd_password             = "${var.trustd_password}"
-    trustd_username             = "${var.trustd_username}"
+    token                       = "${module.security.kubeadm_token}"
+    trustd_endpoints            = "${cidrhost(element(packet_ip_attachment.master.*.cidr_notation, 0), 0)}:50001"
+    trustd_password             = "${module.security.trustd_password}"
+    trustd_username             = "${module.security.trustd_username}"
   }
 }
 
@@ -302,20 +309,21 @@ resource "null_resource" "userdata" {
 
   provisioner "file" {
     content     = "${data.template_file.worker_userdata.rendered}"
-    destination = "/var/lib/matchbox/assets/talos/${var.talos_version}/userdata-worker.json"
+    destination = "/var/lib/matchbox/assets/talos/${var.talos_version}/userdata-worker.yaml"
   }
 
   provisioner "file" {
     content     = "${data.template_file.master_userdata.rendered}"
-    destination = "/var/lib/matchbox/assets/talos/${var.talos_version}/userdata-master.json"
+    destination = "/var/lib/matchbox/assets/talos/${var.talos_version}/userdata-master.yaml"
   }
 
   provisioner "file" {
     content     = "${data.template_file.init_userdata.rendered}"
-    destination = "/var/lib/matchbox/assets/talos/${var.talos_version}/userdata-init.json"
+    destination = "/var/lib/matchbox/assets/talos/${var.talos_version}/userdata-init.yaml"
   }
 }
 
+/*
 resource "packet_device" "talos_worker" {
   hostname         = "${format("talosw-%02d.example.com", count.index + 1)}"
   operating_system = "custom_ipxe"
