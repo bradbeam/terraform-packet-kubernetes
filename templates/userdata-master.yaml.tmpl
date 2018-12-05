@@ -47,3 +47,16 @@ services:
     image: docker.io/autonomy/blockd:latest 
   osd:
     image: docker.io/autonomy/osd:latest 
+install:
+  wipe: true
+  boot:
+    device: /dev/sda
+    size: 1024000000
+  root:
+    device: /dev/sda
+    data:
+      - http://${bootstrap_node}:8080/assets/talos/v0.1.0-alpha.14/rootfs.tar.gz
+    size: 1024000000
+  data:
+    device: /dev/sda
+    size: 1024000000
