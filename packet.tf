@@ -141,9 +141,8 @@ resource "null_resource" "matchbox_profiles" {
   provisioner "remote-exec" {
     inline = [
       "cd /var/lib/matchbox/assets/talos/${var.talos_version}",
-      "[[ -f /var/lib/matchbox/assets/talos/${var.talos_version}/vmlinuz ]] || wget https://github.com/bradbeam/talos/releases/download/${var.talos_version}/vmlinuz",
-      "[[ -f /var/lib/matchbox/assets/talos/${var.talos_version}/initramfs.xz ]] || wget https://github.com/bradbeam/talos/releases/download/${var.talos_version}/initramfs.xz",
-      "[[ -f /var/lib/matchbox/assets/talos/${var.talos_version}/rootfs.tar.gz ]] || wget https://github.com/bradbeam/talos/releases/download/${var.talos_version}/rootfs.tar.gz",
+      "wget https://github.com/autonomy/talos/releases/download/${var.talos_version}/vmlinuz -O vmlinuz",
+      "wget https://github.com/autonomy/talos/releases/download/${var.talos_version}/initramfs.xz -O initramfs.xz",
     ]
   }
 
@@ -183,23 +182,17 @@ resource "null_resource" "matchbox_master_groups" {
   }
 }
 
+// TODO figure out what's needed to make use of the private network addr
 resource "packet_device" "talos_master" {
   hostname         = "${format("talosm-%02d.example.com", count.index + 1)}"
   operating_system = "custom_ipxe"
   plan             = "${var.packet_master_type}"
   count            = "${var.talos_master_count}"
-
-  // public network.0 
-  // private network.1
-  // atm need to use public addr due to bootstrap limitations
-  ipxe_script_url = "http://${packet_device.talos_bootstrap.network.0.address}:8080/boot.ipxe"
-
-  // user_data = "#!ipxe\nchain http://${packet_device.talos_bootstrap.network.0.address}:8080/ipxe?profile=talos"
-
-  always_pxe    = "true"
-  facility      = "${var.packet_facility}"
-  project_id    = "${packet_project.talos.id}"
-  billing_cycle = "hourly"
+  ipxe_script_url  = "http://${packet_device.talos_bootstrap.network.0.address}:8080/boot.ipxe"
+  always_pxe       = "true"
+  facility         = "${var.packet_facility}"
+  project_id       = "${packet_project.talos.id}"
+  billing_cycle    = "hourly"
 }
 
 data "packet_precreated_ip_block" "talos" {
@@ -211,9 +204,9 @@ data "packet_precreated_ip_block" "talos" {
 
 # Assign /32 subnet (single address) from reserved block to a device
 resource "packet_ip_attachment" "master" {
-  #device_id = "${packet_device.talos_master.id}"
   device_id = "${element(packet_device.talos_master.*.id, count.index)}"
 
+  // TODO: improve this logic
   // Random calc, but by default each device is provisioned a /31 ( 2 addrs )
   // so we need to account for 2*master ips used, and giving 6ips buffer space
   cidr_notation = "${cidrhost(data.packet_precreated_ip_block.talos.cidr_notation,(var.talos_master_count * 2 + 6 + count.index))}/32"
